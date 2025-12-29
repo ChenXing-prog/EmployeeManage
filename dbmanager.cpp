@@ -1,155 +1,197 @@
 #include "dbmanager.h"
+
 #include <QSqlQuery>
 #include <QSqlError>
-#include <QVariant>
+#include <QUuid>
 
-bool DbManager::open(const QString& path, QString* err) {
-    if (QSqlDatabase::contains("main_conn")) {
-        m_db = QSqlDatabase::database("main_conn");
+DbManager::DbManager() {
+    m_connName = "conn_" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
+
+DbManager::~DbManager() {
+    close();
+}
+
+bool DbManager::open(const QString& path) {
+    if (QSqlDatabase::contains(m_connName)) {
+        m_db = QSqlDatabase::database(m_connName);
     } else {
-        m_db = QSqlDatabase::addDatabase("QSQLITE", "main_conn");
+        m_db = QSqlDatabase::addDatabase("QSQLITE", m_connName);
     }
     m_db.setDatabaseName(path);
-
-    if (!m_db.open()) {
-        if (err) *err = m_db.lastError().text();
-        return false;
-    }
-    return true;
+    return m_db.open();
 }
 
 void DbManager::close() {
-    if (m_db.isValid() && m_db.isOpen()) m_db.close();
+    if (m_db.isValid()) {
+        m_db.close();
+    }
+    if (QSqlDatabase::contains(m_connName)) {
+        QSqlDatabase::removeDatabase(m_connName);
+    }
 }
 
-bool DbManager::initSchema(QString* err) {
+bool DbManager::isOpen() const {
+    return m_db.isOpen();
+}
+
+QSqlDatabase DbManager::db() const {
+    return m_db;
+}
+
+bool DbManager::ensureTables(QString* err) {
     QSqlQuery q(m_db);
 
     const char* ddlDept =
         "CREATE TABLE IF NOT EXISTS departments("
-        " depno INTEGER PRIMARY KEY,"
-        " depname TEXT NOT NULL,"
-        " parent INTEGER NULL"
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "depno INTEGER NOT NULL UNIQUE,"
+        "name TEXT NOT NULL,"
+        "parent_id INTEGER NULL"
         ");";
 
-    const char* ddlEmp =
-        "CREATE TABLE IF NOT EXISTS employees("
-        " no INTEGER PRIMARY KEY,"
-        " name TEXT NOT NULL,"
-        " depno INTEGER NOT NULL,"
-        " salary REAL NOT NULL"
-        ");";
-
-    if (!q.exec(ddlDept)) { if (err) *err = q.lastError().text(); return false; }
-    if (!q.exec(ddlEmp))  { if (err) *err = q.lastError().text(); return false; }
-    return true;
-}
-
-bool DbManager::seedDepartmentsIfEmpty(QString* err) {
-    QSqlQuery q(m_db);
-    if (!q.exec("SELECT COUNT(*) FROM departments;")) {
+    if (!q.exec(ddlDept)) {
         if (err) *err = q.lastError().text();
         return false;
     }
-    int cnt = 0;
-    if (q.next()) cnt = q.value(0).toInt();
-    if (cnt > 0) return true;
 
-    // 给你一份最小可视化层级：公司0 -> 研发10/行政20/市场30 -> 子部门
-    if (!m_db.transaction()) { /* ignore */ }
+    const char* ddlEmp =
+        "CREATE TABLE IF NOT EXISTS employees("
+        "no INTEGER PRIMARY KEY,"
+        "name TEXT NOT NULL,"
+        "depno INTEGER NOT NULL,"
+        "salary REAL NOT NULL"
+        ");";
 
-    auto execOne = [&](const QString& sql, const QVariantList& binds) -> bool {
-        QSqlQuery ins(m_db);
-        ins.prepare(sql);
-        for (auto& v : binds) ins.addBindValue(v);
-        if (!ins.exec()) { if (err) *err = ins.lastError().text(); return false; }
-        return true;
-    };
-
-    const QString ins = "INSERT INTO departments(depno, depname, parent) VALUES(?,?,?);";
-
-    // 根
-    if (!execOne(ins, {0, "公司", QVariant()})) { m_db.rollback(); return false; }
-    // 一级
-    if (!execOne(ins, {10, "研发中心", 0})) { m_db.rollback(); return false; }
-    if (!execOne(ins, {20, "行政中心", 0})) { m_db.rollback(); return false; }
-    if (!execOne(ins, {30, "市场中心", 0})) { m_db.rollback(); return false; }
-    // 二级
-    if (!execOne(ins, {11, "软件部", 10})) { m_db.rollback(); return false; }
-    if (!execOne(ins, {12, "测试部", 10})) { m_db.rollback(); return false; }
-    if (!execOne(ins, {21, "人事部", 20})) { m_db.rollback(); return false; }
-    if (!execOne(ins, {22, "财务部", 20})) { m_db.rollback(); return false; }
-
-    if (!m_db.commit()) { if (err) *err = m_db.lastError().text(); return false; }
+    if (!q.exec(ddlEmp)) {
+        if (err) *err = q.lastError().text();
+        return false;
+    }
     return true;
 }
 
 QVector<DeptRow> DbManager::fetchDepartments(QString* err) const {
     QVector<DeptRow> out;
     QSqlQuery q(m_db);
-    if (!q.exec("SELECT depno, depname, parent FROM departments;")) {
+    if (!q.exec("SELECT id, depno, name, parent_id FROM departments ORDER BY id ASC;")) {
         if (err) *err = q.lastError().text();
         return out;
     }
     while (q.next()) {
         DeptRow r;
-        r.depno = q.value(0).toInt();
-        r.depname = q.value(1).toString();
-        r.parent = q.value(2).isNull() ? -1 : q.value(2).toInt();
+        r.id = q.value(0).toInt();
+        r.depno = q.value(1).toInt();
+        r.name = q.value(2).toString();
+        r.parentId = q.value(3);
         out.push_back(r);
     }
     return out;
 }
 
-QVector<EmpRow> DbManager::fetchEmployees(QString* err) const {
-    QVector<EmpRow> out;
+bool DbManager::countDepartments(int* outCount, QString* err) const {
+    if (!outCount) return false;
+    QSqlQuery q(m_db);
+    if (!q.exec("SELECT COUNT(*) FROM departments;")) {
+        if (err) *err = q.lastError().text();
+        return false;
+    }
+    if (q.next()) {
+        *outCount = q.value(0).toInt();
+        return true;
+    }
+    return false;
+}
+
+bool DbManager::insertDepartment(int depno, const QString& name, const QVariant& parentId, int* outNewId, QString* err) {
+    QSqlQuery q(m_db);
+    q.prepare("INSERT INTO departments(depno, name, parent_id) VALUES(?,?,?);");
+    q.addBindValue(depno);
+    q.addBindValue(name);
+    if (parentId.isValid() && !parentId.isNull()) q.addBindValue(parentId);
+    else q.addBindValue(QVariant(QVariant::Int)); // NULL
+    if (!q.exec()) {
+        if (err) *err = q.lastError().text();
+        return false;
+    }
+    if (outNewId) *outNewId = q.lastInsertId().toInt();
+    return true;
+}
+
+QVector<Emp> DbManager::fetchEmployeesByDept(int depno, QString* err) const {
+    QVector<Emp> out;
+    QSqlQuery q(m_db);
+    q.prepare("SELECT no, name, depno, salary FROM employees WHERE depno=?;");
+    q.addBindValue(depno);
+    if (!q.exec()) {
+        if (err) *err = q.lastError().text();
+        return out;
+    }
+    while (q.next()) {
+        Emp e;
+        e.no = q.value(0).toInt();
+        e.name = q.value(1).toString();
+        e.depno = q.value(2).toInt();
+        e.salary = q.value(3).toDouble();
+        out.push_back(e);
+    }
+    return out;
+}
+
+QVector<Emp> DbManager::fetchAllEmployees(QString* err) const {
+    QVector<Emp> out;
     QSqlQuery q(m_db);
     if (!q.exec("SELECT no, name, depno, salary FROM employees;")) {
         if (err) *err = q.lastError().text();
         return out;
     }
     while (q.next()) {
-        EmpRow r;
-        r.no = q.value(0).toInt();
-        r.name = q.value(1).toString();
-        r.depno = q.value(2).toInt();
-        r.salary = q.value(3).toDouble();
-        out.push_back(r);
+        Emp e;
+        e.no = q.value(0).toInt();
+        e.name = q.value(1).toString();
+        e.depno = q.value(2).toInt();
+        e.salary = q.value(3).toDouble();
+        out.push_back(e);
     }
     return out;
 }
 
-bool DbManager::replaceAllEmployees(const QVector<EmpRow>& rows, QString* err) {
+bool DbManager::replaceAllEmployees(const QVector<Emp>& emps, QString* err) {
     if (!m_db.transaction()) {
         if (err) *err = m_db.lastError().text();
         return false;
     }
 
-    QSqlQuery del(m_db);
-    if (!del.exec("DELETE FROM employees;")) {
-        if (err) *err = del.lastError().text();
+    QSqlQuery q(m_db);
+    if (!q.exec("DELETE FROM employees;")) {
         m_db.rollback();
+        if (err) *err = q.lastError().text();
         return false;
     }
 
-    QSqlQuery ins(m_db);
-    ins.prepare("INSERT INTO employees(no,name,depno,salary) VALUES(?,?,?,?);");
-
-    for (const auto& r : rows) {
-        ins.addBindValue(r.no);
-        ins.addBindValue(r.name);
-        ins.addBindValue(r.depno);
-        ins.addBindValue(r.salary);
-        if (!ins.exec()) {
-            if (err) *err = ins.lastError().text();
+    q.prepare("INSERT INTO employees(no,name,depno,salary) VALUES(?,?,?,?);");
+    for (const auto& e : emps) {
+        q.addBindValue(e.no);
+        q.addBindValue(e.name);
+        q.addBindValue(e.depno);
+        q.addBindValue(e.salary);
+        if (!q.exec()) {
             m_db.rollback();
+            if (err) *err = q.lastError().text();
             return false;
         }
-        ins.finish();
     }
 
     if (!m_db.commit()) {
         if (err) *err = m_db.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DbManager::clearEmployees(QString* err) {
+    QSqlQuery q(m_db);
+    if (!q.exec("DELETE FROM employees;")) {
+        if (err) *err = q.lastError().text();
         return false;
     }
     return true;

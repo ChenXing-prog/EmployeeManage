@@ -2,11 +2,13 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QSqlDatabase>
 #include <QVariant>
 
+#include "avl.h"
+#include "depttree.h"
+#include "dbmanager.h"
+#include <QTreeWidgetItem>
 class QTreeWidget;
-class QTreeWidgetItem;
 class QTableWidget;
 class QLineEdit;
 class QLabel;
@@ -19,32 +21,32 @@ public:
     ~MainWindow() override;
 
 private slots:
-    // -------- 部门 --------
+    // 部门
     void addDeptAsTop();
     void addDeptAsChild();
     void onDeptSelectionChanged();
 
-    // -------- 员工 --------
+
+
+    // 员工（右侧按钮）
     void addEmployee();
-    void updateEmployeeByNo();
-    void deleteSelectedEmployee();
-    void refreshEmployees();
-    void clearAllEmployees();
+    void updateEmployee();
+    void deleteSelectedRow();
+    void clearAllInMemoryAndDb();
+    void reloadFromDb(); // “刷新”按钮：重新从 DB 载入到 AVL
+
+    void sortBySalary();
+    void sortByNo();
+
 
 private:
     // ---------- UI ----------
-    QTreeWidget*  treeDepts = nullptr;
+    QTreeWidget* treeDepts = nullptr;
 
     QTableWidget* tableEmps = nullptr;
-    QLabel*       statusLabel = nullptr;
+    QLabel* statusLabel = nullptr;
 
-    // dept inputs
-    QLineEdit* editDeptNo = nullptr;
-    QLineEdit* editDeptName = nullptr;
-    QPushButton* btnAddDeptTop = nullptr;
-    QPushButton* btnAddDeptChild = nullptr;
-
-    // emp inputs
+    // 员工编辑框（你原先的）
     QLineEdit* editNo = nullptr;
     QLineEdit* editName = nullptr;
     QLineEdit* editDepno = nullptr;
@@ -53,29 +55,55 @@ private:
     QPushButton* btnAddEmp = nullptr;
     QPushButton* btnUpdateEmp = nullptr;
     QPushButton* btnDeleteEmp = nullptr;
-    QPushButton* btnRefreshEmp = nullptr;
-    QPushButton* btnClearEmp = nullptr;
+    QPushButton* btnReload = nullptr;
+    QPushButton* btnClearDb = nullptr;
+
+    QPushButton* btnOrderBySalary = nullptr;
+    QPushButton* btnOrderByNo = nullptr;
+    // 新增部门区域
+    QLineEdit* editDeptNo = nullptr;
+    QLineEdit* editDeptName = nullptr;
+    QPushButton* btnAddDeptTop = nullptr;
+    QPushButton* btnAddDeptChild = nullptr;
+
 
     // ---------- DB ----------
-    QSqlDatabase db;
+    DbManager dbm;
+
+    // ---------- In-Memory Main Data ----------
+    // ★主数据：AVL 保存全部员工（按 no 作为 key）
+    AvlTree empAvl;
+
+    // 部门树（用于左侧展示 + 校验 depno 是否存在）
+    DeptTree deptTree;
 
 private:
     void buildUi();
 
-    // db
     QString dbPath() const;
-    void initDb();
-    void seedDefaultDepartmentsIfEmpty();
+    void initDbAndLoad();
 
-    // departments
-    void loadDeptsToTree(int selectDeptId = -1);
-    QVariant selectedDeptId() const;     // departments.id
-    int selectedDepno() const;           // departments.depno (0=全部)
+    enum SortMode { SortByNo, SortBySalary };
+    SortMode sortMode = SortByNo;
+
+    // 部门
+    void seedDefaultDepartmentsIfEmpty();
+    void loadDeptsToTree(int selectDeptId = 0);
+    QVariant selectedDeptId() const;
     bool addDeptToDb(int depno, const QString& name, const QVariant& parentId, int* outNewId = nullptr);
 
-    // employees
-    void refreshEmployeesByDeptSelection();
-    void fillEmpInputsFromSelection();
+    // 员工（内存为主）
+    void loadEmployeesFromDbToAvl();     // DB -> AVL
+    void saveEmployeesFromAvlToDb();     // AVL -> DB
+    void refreshEmployeesByDeptSelection(); // AVL -> table
+    int selectedDeptNoForFilter() const;
+
+    void setStatus(const QString& s);
+
+    void collectDeptNosFromItem(QTreeWidgetItem* item, QSet<int>& out) const;
+    QSet<int> selectedDeptSubtreeNos() const;
+
+
 };
 
 #endif // MAINWINDOW_H
