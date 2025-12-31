@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QString>
 #include <QVariant>
+#include <QList>
 
 struct DeptRow {
     int id = 0;
@@ -33,8 +34,15 @@ public:
     QList<int> allIds() const;
 
 private:
-    QMap<int, DeptRow> m_nodes;        // id -> row
-    QMultiMap<int, int> m_children;    // parentId -> childId
+    // 仍然保留节点表：id -> row
+    QMap<int, DeptRow> m_nodes;
+
+    // ✅ 孩子-兄弟表示法（内部结构）
+    // firstChild[id] = 该节点的第一个孩子 id（没有则为 0 / 不存在）
+    QMap<int, int> m_firstChild;
+
+    // nextSibling[id] = 该节点的下一个兄弟 id（没有则为 0 / 不存在）
+    QMap<int, int> m_nextSibling;
 };
 
 #endif // DEPTTREE_H

@@ -5,7 +5,7 @@
 #include <QUuid>
 
 DbManager::DbManager() {
-    m_connName = "conn_" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_connName = "conn_sqlist";
 }
 
 DbManager::~DbManager() {
@@ -13,11 +13,7 @@ DbManager::~DbManager() {
 }
 
 bool DbManager::open(const QString& path) {
-    if (QSqlDatabase::contains(m_connName)) {
-        m_db = QSqlDatabase::database(m_connName);
-    } else {
-        m_db = QSqlDatabase::addDatabase("QSQLITE", m_connName);
-    }
+    m_db = QSqlDatabase::addDatabase("QSQLITE",m_connName);
     m_db.setDatabaseName(path);
     return m_db.open();
 }
@@ -39,6 +35,7 @@ QSqlDatabase DbManager::db() const {
     return m_db;
 }
 
+//初始化数据库结构
 bool DbManager::ensureTables(QString* err) {
     QSqlQuery q(m_db);
 
@@ -69,6 +66,7 @@ bool DbManager::ensureTables(QString* err) {
     }
     return true;
 }
+
 
 QVector<DeptRow> DbManager::fetchDepartments(QString* err) const {
     QVector<DeptRow> out;
@@ -155,6 +153,7 @@ QVector<Emp> DbManager::fetchAllEmployees(QString* err) const {
     return out;
 }
 
+//从AVL树提取所有Employees，保存到DB
 bool DbManager::replaceAllEmployees(const QVector<Emp>& emps, QString* err) {
     if (!m_db.transaction()) {
         if (err) *err = m_db.lastError().text();

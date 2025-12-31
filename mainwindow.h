@@ -38,6 +38,7 @@ private slots:
     void sortBySalary();
     void sortByNo();
 
+    void saveAll();
 
 private:
     // ---------- UI ----------
@@ -60,6 +61,8 @@ private:
 
     QPushButton* btnOrderBySalary = nullptr;
     QPushButton* btnOrderByNo = nullptr;
+
+    QPushButton* btnSaveAll = nullptr;
     // 新增部门区域
     QLineEdit* editDeptNo = nullptr;
     QLineEdit* editDeptName = nullptr;
@@ -71,38 +74,65 @@ private:
     DbManager dbm;
 
     // ---------- In-Memory Main Data ----------
-    // ★主数据：AVL 保存全部员工（按 no 作为 key）
+    // 主数据：AVL 保存全部员工（按 no 作为 key）
     AvlTree empAvl;
 
     // 部门树（用于左侧展示 + 校验 depno 是否存在）
     DeptTree deptTree;
 
+    QVector<DeptRow> deptRowsCache;   // 部门主数据缓存（DB->内存，仅启动/刷新时加载一次）
+
 private:
     void buildUi();
 
     QString dbPath() const;
+
+    //初始化数据库
     void initDbAndLoad();
 
     enum SortMode { SortByNo, SortBySalary };
     SortMode sortMode = SortByNo;
 
     // 部门
+    //如果没有部门，就插入默认部门
     void seedDefaultDepartmentsIfEmpty();
+
+    //从数据库中读取部门信息
     void loadDeptsToTree(int selectDeptId = 0);
+
+    //退回选中部门的id
     QVariant selectedDeptId() const;
+
+    //向数据库插入部门信息
     bool addDeptToDb(int depno, const QString& name, const QVariant& parentId, int* outNewId = nullptr);
 
     // 员工（内存为主）
+
+    //从数据库中读取所有员工，构建AVL树
     void loadEmployeesFromDbToAvl();     // DB -> AVL
+
+
+
+    //将AVL中的员工数据写回数据库
     void saveEmployeesFromAvlToDb();     // AVL -> DB
+
+    //刷新table的显示信息
     void refreshEmployeesByDeptSelection(); // AVL -> table
+
+    //把选中的部门id转换为depno
     int selectedDeptNoForFilter() const;
 
+    //状态设置
     void setStatus(const QString& s);
 
+    //找到子树
     void collectDeptNosFromItem(QTreeWidgetItem* item, QSet<int>& out) const;
+
+    //过滤子树x
     QSet<int> selectedDeptSubtreeNos() const;
 
+
+    void appendDeptAndRefresh(int newId, int depno, const QString& name, const QVariant& parentId);
 
 };
 
