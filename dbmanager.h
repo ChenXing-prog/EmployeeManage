@@ -6,8 +6,8 @@
 #include <QString>
 #include <QVariant>
 
-#include "avl.h"       // Emp
-#include "depttree.h"  // DeptRow
+#include "avl.h"
+#include "depttree.h"
 
 class DbManager {
 public:
@@ -19,21 +19,21 @@ public:
     bool isOpen() const;
     QSqlDatabase db() const;
 
-    // 建表
+    //建表
     bool ensureTables(QString* err = nullptr);
 
-    // 部门
+    //部门
     QVector<DeptRow> fetchDepartments(QString* err = nullptr) const;
     bool insertDepartment(int depno, const QString& name, const QVariant& parentId, int* outNewId, QString* err = nullptr);
     bool countDepartments(int* outCount, QString* err = nullptr) const;
 
-    // 员工（旧接口保留不用也行）
+    //员工（旧接口保留不用也行）
     QVector<Emp> fetchEmployeesByDept(int depno, QString* err = nullptr) const;
 
-    // ★新增：一次性加载全部员工
+    //一次性加载全部员工
     QVector<Emp> fetchAllEmployees(QString* err = nullptr) const;
 
-    // ★新增：用内存主数据全量写回 DB（持久化）
+    //用内存主数据全量写回 DB
     bool replaceAllEmployees(const QVector<Emp>& emps, QString* err = nullptr);
 
     bool clearEmployees(QString* err = nullptr);
@@ -43,4 +43,4 @@ private:
     QString m_connName;
 };
 
-#endif // DBMANAGER_H
+#endif

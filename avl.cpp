@@ -64,7 +64,7 @@ AvlTree::Node* AvlTree::removeRec(Node* n, int no, bool& ok) {
             delete n;
             return child;
         }
-        // 2 children: replace with inorder successor
+
         Node* succ = minNode(n->r);
         n->e = succ->e;
         bool dummy = false;

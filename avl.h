@@ -18,11 +18,11 @@ public:
     AvlTree(const AvlTree&) = delete;
     AvlTree& operator=(const AvlTree&) = delete;
 
-    bool insert(const Emp& e);       // no 重复返回 false
-    bool remove(int no);             // 不存在返回 false
+    bool insert(const Emp& e);
+    bool remove(int no);
     Emp* find(int no);
 
-    QVector<Emp> inorder() const;    // 按 no 输出
+    QVector<Emp> inorder() const;
     void clear();
 
     int size() const { return m_size; }

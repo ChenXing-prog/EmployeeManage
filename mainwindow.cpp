@@ -18,11 +18,11 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <functional>
-
+#include <QCoreApplication>
 static bool cmpSalaryAsc(const Emp& a, const Emp& b) {
     if (a.salary < b.salary) return true;
     if (a.salary > b.salary) return false;
-    return a.no < b.no; // 工资一样时按工号稳定一下（保证确定性）
+    return a.no < b.no;
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -42,22 +42,47 @@ void MainWindow::setStatus(const QString& s) {
     if (statusLabel) statusLabel->setText(s);
 }
 
-QString MainWindow::dbPath() const {
-    return QDir::homePath() + "/EmployeeManage.db";
+QString MainWindow::dbPath() const
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+
+    QString target = dir + "/EmployeeManage.db";
+
+    if (!QFile::exists(target)) {
+        QString seed = ":/data/EmployeeManage.db";
+
+        if (QFile::exists(seed)) {
+            if (!QFile::copy(seed, target)) {
+                qDebug() << "Copy seed db failed:" << seed << "->" << target;
+            }
+            QFile::setPermissions(target,
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                      QFileDevice::ReadUser  | QFileDevice::WriteUser  |
+                                      QFileDevice::ReadGroup | QFileDevice::ReadOther);
+        } else {
+            qDebug() << "Seed db not found in resources:" << seed;
+        }
+    }
+
+    qDebug() << "Using db path:" << target;
+
+    return target;
 }
+
 
 void MainWindow::initDbAndLoad() {
     qDebug() << "1";
     //打开数据库
     if (!dbm.open(dbPath())) {
-        QMessageBox::critical(this, "DB错误", "无法打开SQLite数据库:\n" + dbm.db().lastError().text());
+        QMessageBox::warning(this, "DB错误", "无法打开SQLite数据库:\n" + dbm.db().lastError().text());
         exit(1);
     }
 
     //建数据库
     QString err;
     if (!dbm.ensureTables(&err)) {
-        QMessageBox::critical(this, "DB错误", "建表失败:\n" + err);
+        QMessageBox::warning(this, "DB错误", "建表失败:\n" + err);
         exit(1);
     }
     qDebug() << "1";
@@ -70,19 +95,19 @@ void MainWindow::initDbAndLoad() {
         return;
     }
 
-    // 用缓存建树 + 绘制
+    //用缓存建树 + 绘制
     deptTree.buildFromRows(deptRowsCache);
     loadDeptsToTree(0);
 
 
-    // ★启动时：DB -> AVL
+    //启动时：DB -> AVL
     loadEmployeesFromDbToAvl();
     refreshEmployeesByDeptSelection();
 }
 
 void MainWindow::buildUi() {
     qDebug() << "1";
-    setWindowTitle("EmployeeManage - 部门树 + 员工表 (Qt + SQLite)");
+    setWindowTitle("EmployeeManage");
     qDebug() << "2";
     resize(1300, 780);
     qDebug() << "3";
@@ -94,7 +119,8 @@ void MainWindow::buildUi() {
     root->setContentsMargins(10, 10, 10, 10);
     root->setSpacing(10);
 
-    // ========= 左侧：部门树 + 新增部门 =========
+    //左侧：部门树 + 新增部门
+
     auto* leftBox = new QGroupBox("部门树", central);
     auto* leftLay = new QVBoxLayout(leftBox);
 
@@ -133,7 +159,7 @@ void MainWindow::buildUi() {
 
     root->addWidget(leftBox, 0);
 
-    // ========= 右侧：员工列表 + 增删改 =========
+    //右侧：员工列表 + 增删改
     auto* rightBox = new QGroupBox("员工列表", central);
     auto* rightLay = new QVBoxLayout(rightBox);
 
@@ -191,7 +217,6 @@ void MainWindow::buildUi() {
 
     root->addWidget(rightBox, 1);
 
-    // ========= signals =========
     connect(treeDepts, &QTreeWidget::itemSelectionChanged, this, &MainWindow::onDeptSelectionChanged);
     connect(btnAddDeptTop, &QPushButton::clicked, this, &MainWindow::addDeptAsTop);
     connect(btnAddDeptChild, &QPushButton::clicked, this, &MainWindow::addDeptAsChild);
@@ -215,7 +240,6 @@ void MainWindow::seedDefaultDepartmentsIfEmpty() {
         return;
     }
     if (cnt > 0) return;
-
 }
 
 QVariant MainWindow::selectedDeptId() const {
@@ -245,7 +269,7 @@ void MainWindow::loadDeptsToTree(int selectDeptId) {
         return it;
     };
 
-    // 根
+    //根
     auto* rootItem = makeItem(0, nullptr);
 
     // 递归构建
@@ -259,7 +283,8 @@ void MainWindow::loadDeptsToTree(int selectDeptId) {
     buildRec(0, rootItem);
     treeDepts->expandAll();
 
-    // 选中
+    //选中
+
     std::function<QTreeWidgetItem*(QTreeWidgetItem*)> selectById;
     selectById = [&](QTreeWidgetItem* it) -> QTreeWidgetItem* {
         if (!it) return nullptr;
@@ -313,7 +338,7 @@ void MainWindow::addDeptAsChild() {
     if (!pid.isValid() || pid.isNull()) pid = 0;
     int pidInt = pid.toInt();
 
-    // 不允许挂在不存在的节点下
+    //不允许挂在不存在的节点下
     if (!deptTree.containsId(pidInt)) pidInt = 0;
 
     QVariant parentId = (pidInt==0) ? QVariant() : QVariant(pidInt);
@@ -331,7 +356,6 @@ void MainWindow::onDeptSelectionChanged() {
     //按当前部门展示员工
     refreshEmployeesByDeptSelection();
 
-
     //在编辑框中添加对应部门编号
     auto *it = treeDepts->currentItem();
     if (!it) return;
@@ -347,7 +371,7 @@ void MainWindow::onDeptSelectionChanged() {
     editDepno->setText(QString::number(depno));
 }
 
-// ===================== 员工：DB<->AVL =====================
+//员工：DB<->AVL
 
 void MainWindow::loadEmployeesFromDbToAvl() {
     empAvl.clear();
@@ -377,11 +401,11 @@ void MainWindow::saveEmployeesFromAvlToDb() {
 void MainWindow::refreshEmployeesByDeptSelection() {
     if (!tableEmps) return;
 
-    // 1) 得到当前选中部门子树 depno 集合
+    //得到当前选中部门子树 depno 集合
     QSet<int> depSet = selectedDeptSubtreeNos();
-    bool noFilter = depSet.isEmpty(); // 空集合代表“全部部门”
+    bool noFilter = depSet.isEmpty(); //空集合代表全部部门
 
-    // 2) 从 AVL 拿全量员工（按 no 升序）
+    //从AVL拿全量员工（按 no 升序）
     QVector<Emp> all = empAvl.inorder();
     QVector<Emp> show;
     show.reserve(all.size());
@@ -395,7 +419,7 @@ void MainWindow::refreshEmployeesByDeptSelection() {
         std::sort(show.begin(), show.end(), cmpSalaryAsc);
     }
 
-    // 3) 填表：depno 在集合里（或不需要过滤）就显示
+    //填表：depno 在集合里就显示
     tableEmps->setRowCount(0);
     tableEmps->setRowCount(show.size());
 
@@ -421,8 +445,7 @@ void MainWindow::reloadFromDb() {
     refreshEmployeesByDeptSelection();
 }
 
-// ===================== 员工：所有操作走 AVL =====================
-
+//员工
 void MainWindow::addEmployee() {
     bool okNo=false, okDep=false, okSal=false;
     int no = editNo->text().trimmed().toInt(&okNo);
@@ -453,8 +476,6 @@ void MainWindow::addEmployee() {
     e.salary = salary;
 
     empAvl.insert(e);
-
-    //每一步保存到 DB（AVL -> DB）
 
     refreshEmployeesByDeptSelection();
 }
@@ -563,16 +584,17 @@ void MainWindow::sortBySalary(){
     sortMode = SortMode::SortBySalary;
     refreshEmployeesByDeptSelection();
 }
+
 void MainWindow::appendDeptAndRefresh(int newId, int depno, const QString& name, const QVariant& parentId) {
     DeptRow r;
     r.id = newId;
     r.depno = depno;
     r.name = name;
-    r.parentId = parentId;  // 顶级就 QVariant()
+    r.parentId = parentId;  //顶级为QVariant()
 
-    deptRowsCache.push_back(r);                 //  更新内存主数据
-    deptTree.buildFromRows(deptRowsCache);      //  用缓存重建 DeptTree（不读 DB）
-    loadDeptsToTree(newId);                     //  刷新 UI，并选中新节点
+    deptRowsCache.push_back(r);                 //更新内存主数据
+    deptTree.buildFromRows(deptRowsCache);//用缓存重建 DeptTree
+    loadDeptsToTree(newId);//刷新UI，并选中新节点
 }
 
 void MainWindow::saveAll(){

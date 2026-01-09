@@ -41,13 +41,13 @@ private slots:
     void saveAll();
 
 private:
-    // ---------- UI ----------
+    //UI
     QTreeWidget* treeDepts = nullptr;
 
     QTableWidget* tableEmps = nullptr;
     QLabel* statusLabel = nullptr;
 
-    // 员工编辑框（你原先的）
+    //员工编辑框
     QLineEdit* editNo = nullptr;
     QLineEdit* editName = nullptr;
     QLineEdit* editDepno = nullptr;
@@ -63,24 +63,23 @@ private:
     QPushButton* btnOrderByNo = nullptr;
 
     QPushButton* btnSaveAll = nullptr;
-    // 新增部门区域
+    //新增部门区域
     QLineEdit* editDeptNo = nullptr;
     QLineEdit* editDeptName = nullptr;
     QPushButton* btnAddDeptTop = nullptr;
     QPushButton* btnAddDeptChild = nullptr;
 
 
-    // ---------- DB ----------
+    //DB
     DbManager dbm;
 
-    // ---------- In-Memory Main Data ----------
-    // 主数据：AVL 保存全部员工（按 no 作为 key）
+    //主数据：AVL 保存全部员工（按 no 作为 key）
     AvlTree empAvl;
 
-    // 部门树（用于左侧展示 + 校验 depno 是否存在）
+    //部门树（用于左侧展示 + 校验 depno 是否存在）
     DeptTree deptTree;
 
-    QVector<DeptRow> deptRowsCache;   // 部门主数据缓存（DB->内存，仅启动/刷新时加载一次）
+    QVector<DeptRow> deptRowsCache;//部门主数据缓存（DB->内存，仅启动/刷新时加载一次）
 
 private:
     void buildUi();
@@ -93,7 +92,7 @@ private:
     enum SortMode { SortByNo, SortBySalary };
     SortMode sortMode = SortByNo;
 
-    // 部门
+    //部门
     //如果没有部门，就插入默认部门
     void seedDefaultDepartmentsIfEmpty();
 
@@ -106,18 +105,17 @@ private:
     //向数据库插入部门信息
     bool addDeptToDb(int depno, const QString& name, const QVariant& parentId, int* outNewId = nullptr);
 
-    // 员工（内存为主）
 
     //从数据库中读取所有员工，构建AVL树
-    void loadEmployeesFromDbToAvl();     // DB -> AVL
+    void loadEmployeesFromDbToAvl();
 
 
 
     //将AVL中的员工数据写回数据库
-    void saveEmployeesFromAvlToDb();     // AVL -> DB
+    void saveEmployeesFromAvlToDb();
 
     //刷新table的显示信息
-    void refreshEmployeesByDeptSelection(); // AVL -> table
+    void refreshEmployeesByDeptSelection();
 
     //把选中的部门id转换为depno
     int selectedDeptNoForFilter() const;
@@ -128,7 +126,7 @@ private:
     //找到子树
     void collectDeptNosFromItem(QTreeWidgetItem* item, QSet<int>& out) const;
 
-    //过滤子树x
+    //过滤子树
     QSet<int> selectedDeptSubtreeNos() const;
 
 
